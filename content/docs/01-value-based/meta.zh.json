@@ -1,0 +1,13 @@
+{
+  "title": "第一卷：基于值的修炼之路",
+  "defaultOpen": true,
+  "pages": [
+    "multi-armed-bandits",
+    "mdp",
+    "dynamic-programming",
+    "monte-carlo-and-temporal-difference",
+    "sarsa-and-q-learning",
+    "dqn",
+    "dqn-improvements"
+  ]
+}

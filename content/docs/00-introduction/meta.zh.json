@@ -1,0 +1,9 @@
+{
+  "title": "序章：少年与决策",
+  "defaultOpen": true,
+  "pages": [
+    "introduction",
+    "what-is-reinforcement-learning",
+    "taxonomy"
+  ]
+}

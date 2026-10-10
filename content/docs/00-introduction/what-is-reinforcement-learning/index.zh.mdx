@@ -1,0 +1,151 @@
+---
+title: 什么是强化学习？——萧炎如何从反馈中成长
+description: "以萧炎的历练为主线，理解智能体、环境、状态、动作、奖励、回报与策略。"
+---
+
+> **本章斗气要诀。** 如果把萧炎视为智能体、斗气大陆视为环境，那么每一次修炼、战斗或取舍都是动作，每一次实力增长或受挫都是反馈。强化学习研究的，正是决策者如何在这样的连续交互中学会最大化长期回报。本章建立后续所需的基础词汇：智能体—环境循环、状态、动作、奖励、回报、策略与马尔可夫决策过程。
+
+机器学习广义上研究如何从数据中学习。监督学习接受带标签的样本并拟合一个函数；无监督学习在无标签数据中寻找结构。两者通常把数据看成已经存在、可以反复处理的静态材料——就像拿到一卷整理好的功法，照着其中的范例练习。
+
+强化学习打破了这一假设。它的数据来自**交互**：萧炎今天进入魔兽山脉还是留在城中修炼，会决定明天能看到什么、得到什么，也可能决定将面对怎样的危险。智能体的选择会改变后续数据，这正是 RL 与静态学习最根本的区别。
+
+## 历练，而不是背答案
+
+假设要教少年萧炎在一处陌生试炼场中抵达出口。一种做法是替每种局面预先写好“标准答案”：遇到岔路向左，见到魔兽便使用某招。但只要入口、伤势或敌人位置稍有变化，答案就可能失效。所谓“正确动作”取决于他此刻的状态，而这个状态又是此前一连串行动的结果。
+
+强化学习采用另一条路：让萧炎行动，观察后果，再根据反馈调整。他选择一条路线，耗费斗气却没有进展，便得到较低奖励；避开无谓纠缠、更快抵达出口，便得到较高回报。这里不要求每一步都有导师给出正确标签，只需要一个衡量进展的**奖励信号**，以及能利用反馈改进决策的算法。
+
+这立刻带来监督学习中没有的核心矛盾：**探索与利用的权衡**。萧炎应当**利用**已经验证有效的修炼路线来稳定提升，也必须**探索**未知功法、异火线索或新路线，才有机会发现更高的上限。只顾利用，他可能困在一个尚可却并非最优的方案；只顾探索，他又会不停更换方向，无法把任何策略磨炼成熟。在有随机性的任务里，同一个动作还要尝试多次，才能估计其期望收益，而不能把一次奇遇误当成必然规律。
+
+强化学习还关心一个目标导向的智能体与不确定环境交互的**完整闭环**。监督学习常问“给定输入，输出应是什么”，却不规定输出随后怎样改变世界；经典规划常问“已知完整模型时，最佳动作序列是什么”，却不追问模型从何而来。RL 把感知、行动、反馈、学习与规划重新连在一起。药老可以推演和点评，但真正出手、承担后果并更新策略的，始终是智能体萧炎。
+
+用两组对照把边界钉牢：若药老给出一万张“局面—正确招式”样本，萧炎只拟合答案，这是监督学习；若萧炎必须自己出招、因此改变下一局面，并从迟来的胜负信号调整策略，才是强化学习。再如，已知每条山路的长度并直接求最短路是规划；不知道塌方概率、只能边走边学时，才出现探索、估值与信用分配问题。
+
+## 把斗气大陆写成 RL 系统
+
+一个 RL 系统有两个核心组成部分：做出决策的**智能体**和对行动作出响应的**环境**。在本教程的固定类比中，萧炎是智能体，斗气大陆及当前历练场景是环境；药老是帮助估值与规划的导师，而不是替智能体行动的“最优策略”。
+
+在每个离散时间步 $t$：
+
+1. 环境处于一个**状态** $s_t \in \mathcal{S}$，例如境界、斗气余量、伤势、位置与敌情的完整快照。
+2. 智能体根据当前信息选择一个**动作** $a_t \in \mathcal{A}$，例如修炼、移动、出招或撤退。
+3. 环境按转移规律进入新状态 $s_{t+1}$，并发出一个标量**奖励** $R_{t+1}$。（有些文献把同一奖励记为 $R_t$，与产生它的动作 $a_t$ 对齐。）
+4. 智能体观察奖励与新状态，再作下一次选择。
+
+循环持续进行，直到达到**终止状态**（结束一个**回合**）或无限期进行（**持续性任务**）。
+
+这里还要把“真正终止”与“被外部截断”分开。若萧炎抵达出口或任务失败，环境动力学意义上的回合结束，称为 `terminated`；若只是演示规定最多走 200 步、时间一到便强制停止，称为 `truncated`。前者之后通常没有该任务的未来价值，后者却可能仍有，因此构造自举目标时不能不加区分地把二者都当作零价值终点。
+
+该循环产生的完整序列 $s_0, a_0, R_1, s_1, a_1, R_2, \ldots$ 称为一条**轨迹**。一次从进入试炼到离开的完整历练可以是一条轨迹；RL 的训练数据不是预先摆好的答案，而是智能体亲手走出的这些轨迹。
+
+除了智能体和环境本身，一个 RL 系统有四个主要要素：
+
+- **奖励信号。** 环境在每一步返回的数字，例如实力增长为正、无谓消耗为负。它定义目标，但不直接告诉萧炎“下一招该怎么出”。奖励由环境或任务设计者设定，不能由智能体自行篡改。
+
+- **策略。** 智能体的决策规则，把状态映射到动作或动作概率。确定性策略可以规定“此时总用八极崩”，随机策略则可能以不同概率选择进攻、周旋或撤退。策略可由查找表、简单函数或神经网络表示。
+
+- **价值函数。** 对某个状态或状态—动作对的期望回报估计。即时奖励回答“眼下得到多少”，价值函数则像药老的长远判断，回答“从这里继续走，未来大概能得到多少”。一次暂时退让的即时奖励可能很低，却可能通向价值更高的未来。
+
+- **模型。** 对环境规律的可选描述：给定状态和动作，下一状态与奖励如何分布。药老根据经验推演某次行动的后果，很像在使用一个模型。使用或学习模型的方法称为**基于模型**的方法；不显式建立模型、直接从经验更新的方法称为**无模型**的方法。
+
+奖励 $R_{t+1}$ 只是反馈，不是标准答案。环境不会解释失败缘由，也不会直接展示最优动作。智能体必须从长期经验中学会最大化累积奖励。
+
+## 回报与折扣
+
+然而，上述陈述需要两个改进。
+
+首先，环境可能是随机的。相同境界、相同路线与相同动作，也可能因为对手反应、地形或偶然事件而展开成不同轨迹。所谓“三十年河东”描述的只是当前状态，不保证下一刻仍然如此；行动之后，环境会按转移概率产生新的可能。因此单条轨迹的总奖励是随机变量，智能体真正能优化的是策略所诱导轨迹回报的**期望值**。
+
+其次，“总奖励”通常要区别近期与远期结果。眼前可得的一份修炼资源和多年后才可能兑现的机缘，不应在所有任务里被同等计算；无限持续的任务若直接求和，也可能不收敛。
+
+让我们将**回报** $G_t$ 定义为许多标准 RL 目标所优化的量（总奖励），它是从时间步 $t$ 开始所有未来奖励的折扣和。
+
+**折扣回报定义式。** 它回答“从现在起，把未来每次奖励按时间远近折算后，这条轨迹一共值多少？”
+$$
+G_t = R_{t+1} + \gamma R_{t+2} + \gamma^2 R_{t+3} + \cdots = \sum_{k=0}^{\infty} \gamma^k R_{t+k+1}
+$$
+
+标量 $\gamma \in [0, 1]$ 是**折扣因子**，控制智能体看重未来的程度。$\gamma$ 较小更重眼前，接近 1 则更有“为长期目标布局”的意味。对无限持续任务通常要求 $\gamma < 1$，这样折扣和能够收敛：几何级数 $\sum_{k=0}^{\infty} \gamma^k = 1/(1-\gamma)$ 对任何 $\gamma < 1$ 都是有限的；有明确终点的回合制任务则可以使用 $\gamma = 1$。
+
+用数字算一次。若接下来三步奖励为 $+2,+4,+8$，取 $\gamma=0.5$，则 $G_t=2+0.5\times4+0.25\times8=6$；取 $\gamma=1$，则回报为 $14$。两条轨迹若分别是“现在得 $8$、以后无收获”和“现在得 $2$、下一步得 $10$”，在 $\gamma=0.5$ 时，前者的 $8$ 高于后者的 $2+0.5\times10=7$；在 $\gamma=0.9$ 时，后者变为 $2+0.9\times10=11$，反而超过前者。排序会随任务对远期的重视程度改变。折扣不是在宣判远方不重要，而是在明确当前优化目标如何计时。
+
+放回全书统一路线：斗之气先分清一步奖励与长期回报，斗者在赌博机里练探索，斗师再用 MDP 与贝尔曼方程处理状态转移；大斗师、斗灵和斗王随后分别深入价值评估、控制与策略梯度。这仍只是学习进度，不表示 DQN 天生比表格方法“境界更高”。三十步前的一次退让，也许在第三十一步才换来突破；莫因一步负奖励，就“欺”整条策略贫穷。
+
+这背后是**奖励假设**：所有目标都可以表达为期望累积标量奖励的最大化。这是否总是正确，是该领域仍在探索的问题。
+
+这些定义是抽象的。一个具体的例子会让它们更容易理解。
+
+## 萧炎实战：药老的方格试炼
+
+药老布下一座抽象的**方格试炼**（本教程为讲解而设计）：场地是 4×4 网格，共 16 个格子；两个阴影角落是**终止状态**，到达任意一个便结束回合。萧炎每走一步都消耗时间，因此每次从非终止状态出发的移动都奖励 $-1$，包括进入终止格的最后一步。这是无折扣的回合制任务：$\gamma = 1$。
+
+<svg width="640" height="248" viewBox="0 0 640 248" xmlns="http://www.w3.org/2000/svg" style={{display:'block',margin:'1.5rem auto'}}>
+  <defs>
+    <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="var(--color-fd-foreground)"/>
+    </marker>
+  </defs>
+  <line x1="72" y1="124" x2="72" y2="86" stroke="var(--color-fd-foreground)" strokeWidth="1.5" markerEnd="url(#arrowhead)"/>
+  <line x1="72" y1="124" x2="72" y2="162" stroke="var(--color-fd-foreground)" strokeWidth="1.5" markerEnd="url(#arrowhead)"/>
+  <line x1="72" y1="124" x2="34" y2="124" stroke="var(--color-fd-foreground)" strokeWidth="1.5" markerEnd="url(#arrowhead)"/>
+  <line x1="72" y1="124" x2="110" y2="124" stroke="var(--color-fd-foreground)" strokeWidth="1.5" markerEnd="url(#arrowhead)"/>
+  <text x="72" y="196" textAnchor="middle" fontSize="11" fontFamily="var(--font-code)" fill="var(--color-fd-muted-foreground)">动作</text>
+  <rect x="160" y="12" width="56" height="56" fill="var(--color-fd-secondary)" stroke="var(--color-fd-border)" strokeWidth="1.5"/>
+  <rect x="216" y="12" width="56" height="56" fill="var(--color-fd-card)" stroke="var(--color-fd-border)" strokeWidth="1.5"/>
+  <rect x="272" y="12" width="56" height="56" fill="var(--color-fd-card)" stroke="var(--color-fd-border)" strokeWidth="1.5"/>
+  <rect x="328" y="12" width="56" height="56" fill="var(--color-fd-card)" stroke="var(--color-fd-border)" strokeWidth="1.5"/>
+  <rect x="160" y="68" width="56" height="56" fill="var(--color-fd-card)" stroke="var(--color-fd-border)" strokeWidth="1.5"/>
+  <rect x="216" y="68" width="56" height="56" fill="var(--color-fd-card)" stroke="var(--color-fd-border)" strokeWidth="1.5"/>
+  <rect x="272" y="68" width="56" height="56" fill="var(--color-fd-card)" stroke="var(--color-fd-border)" strokeWidth="1.5"/>
+  <rect x="328" y="68" width="56" height="56" fill="var(--color-fd-card)" stroke="var(--color-fd-border)" strokeWidth="1.5"/>
+  <rect x="160" y="124" width="56" height="56" fill="var(--color-fd-card)" stroke="var(--color-fd-border)" strokeWidth="1.5"/>
+  <rect x="216" y="124" width="56" height="56" fill="var(--color-fd-card)" stroke="var(--color-fd-border)" strokeWidth="1.5"/>
+  <rect x="272" y="124" width="56" height="56" fill="var(--color-fd-card)" stroke="var(--color-fd-border)" strokeWidth="1.5"/>
+  <rect x="328" y="124" width="56" height="56" fill="var(--color-fd-card)" stroke="var(--color-fd-border)" strokeWidth="1.5"/>
+  <rect x="160" y="180" width="56" height="56" fill="var(--color-fd-card)" stroke="var(--color-fd-border)" strokeWidth="1.5"/>
+  <rect x="216" y="180" width="56" height="56" fill="var(--color-fd-card)" stroke="var(--color-fd-border)" strokeWidth="1.5"/>
+  <rect x="272" y="180" width="56" height="56" fill="var(--color-fd-card)" stroke="var(--color-fd-border)" strokeWidth="1.5"/>
+  <rect x="328" y="180" width="56" height="56" fill="var(--color-fd-secondary)" stroke="var(--color-fd-border)" strokeWidth="1.5"/>
+  <text x="244" y="45" textAnchor="middle" fontSize="13" fontFamily="var(--font-code)" fill="var(--color-fd-foreground)">1</text>
+  <text x="300" y="45" textAnchor="middle" fontSize="13" fontFamily="var(--font-code)" fill="var(--color-fd-foreground)">2</text>
+  <text x="356" y="45" textAnchor="middle" fontSize="13" fontFamily="var(--font-code)" fill="var(--color-fd-foreground)">3</text>
+  <text x="188" y="101" textAnchor="middle" fontSize="13" fontFamily="var(--font-code)" fill="var(--color-fd-foreground)">4</text>
+  <text x="244" y="101" textAnchor="middle" fontSize="13" fontFamily="var(--font-code)" fill="var(--color-fd-foreground)">5</text>
+  <text x="300" y="101" textAnchor="middle" fontSize="13" fontFamily="var(--font-code)" fill="var(--color-fd-foreground)">6</text>
+  <text x="356" y="101" textAnchor="middle" fontSize="13" fontFamily="var(--font-code)" fill="var(--color-fd-foreground)">7</text>
+  <text x="188" y="157" textAnchor="middle" fontSize="13" fontFamily="var(--font-code)" fill="var(--color-fd-foreground)">8</text>
+  <text x="244" y="157" textAnchor="middle" fontSize="13" fontFamily="var(--font-code)" fill="var(--color-fd-foreground)">9</text>
+  <text x="300" y="157" textAnchor="middle" fontSize="13" fontFamily="var(--font-code)" fill="var(--color-fd-foreground)">10</text>
+  <text x="356" y="157" textAnchor="middle" fontSize="13" fontFamily="var(--font-code)" fill="var(--color-fd-foreground)">11</text>
+  <text x="188" y="213" textAnchor="middle" fontSize="13" fontFamily="var(--font-code)" fill="var(--color-fd-foreground)">12</text>
+  <text x="244" y="213" textAnchor="middle" fontSize="13" fontFamily="var(--font-code)" fill="var(--color-fd-foreground)">13</text>
+  <text x="300" y="213" textAnchor="middle" fontSize="13" fontFamily="var(--font-code)" fill="var(--color-fd-foreground)">14</text>
+  <text x="528" y="112" textAnchor="middle" fontSize="14" fontFamily="var(--font-code)" fill="var(--color-fd-foreground)">
+    <tspan>R</tspan><tspan dy="4" fontSize="10">t</tspan><tspan dy="-4"> = −1</tspan>
+  </text>
+  <text x="528" y="134" textAnchor="middle" fontSize="11" fontFamily="var(--font-code)" fill="var(--color-fd-muted-foreground)">每次回合内移动</text>
+</svg>
+
+非终止状态为 $\mathcal{S} = \{1, 2, \ldots, 14\}$。动作集为 $\mathcal{A} = \{\text{上}, \text{下}, \text{右}, \text{左}\}$。转移是确定性的：每个动作将智能体移动到该方向的相邻单元格。会将智能体带出网格的动作使其留在原地：从状态 5 向右移动到达状态 6，但从状态 3（右边缘）向右移动使智能体保持在状态 3。
+
+这座试炼把智能体—环境循环压缩成一个可以手算的例子：
+
+- **状态**：萧炎所在的格子，即 14 个非终止状态之一（$\mathcal{S} = \{1, \ldots, 14\}$），外加两个终止状态。
+- **动作**：向四个方向之一移动（$\mathcal{A} = \{\text{上}, \text{下}, \text{右}, \text{左}\}$）。
+- **奖励**：每次从非终止状态出发的移动都有 $R_t=-1$；进入终止格的最后一步也计入。
+- **回合**：从起点到抵达终止格的一整段移动。
+- **回报**：$G_0 = -k$，其中 $k$ 是步数。更短的路径产生更高的回报。
+
+萧炎起初没有路线图。若采用每个方向等概率的随机策略，他会在阵中徘徊，并且每一步都累积 $-1$。最大化总奖励，在这里等价于尽量少走弯路。一个好的算法能从经验中学会：无论身处哪个非终止格，都选择通向最近出口的短路线。
+
+对比例子一：从某格出发，路线甲用 3 步抵达，回报为 $-3$；路线乙用 7 步抵达，回报为 $-7$，所以甲更好。对比例子二：若一次移动撞墙，状态不变但仍得到 $-1$，这一步不是“没有发生转移”，而是发生了从该状态回到自身的转移。反例则是把格子编号当奖励：编号 14 看起来大，却不代表身处 14 就得到 $+14$；状态标签和奖励信号是两种对象。
+
+## 萧炎最终要学会什么
+
+状态、动作、转移、每步奖励与未来奖励折扣合在一起，有一个正式名称：**马尔可夫决策过程**（MDP）。它的定义性假设是**马尔可夫性质**：在状态信息足够完整时，下一状态和奖励只依赖当前状态与动作，而不必再追溯更早的历史。在方格试炼中，当前格子就是预测下一步所需的全部信息；萧炎此前怎样绕到这里并不重要。
+
+这是理想化条件。真实战斗里，只知道萧炎的位置还不够；斗气余量、伤势、对手动作趋势也可能影响下一刻。单次**观测**未必等于完整**状态**，实践中常把近期历史一起输入，令马尔可夫性质近似成立。MDP 的完整数学结构——动力学、价值函数与贝尔曼方程——将在 [MDP 章节](/docs/01-value-based/mdp) 展开。
+
+MDP 的解是一个**策略** $\pi$：它规定萧炎在每种状态下如何选择动作。随机策略 $\pi(a \mid s)$ 为每个动作分配概率；确定性策略 $\pi(s)$ 则把每个状态映射到唯一动作。**最优策略** $\pi^*$ 从每个状态出发都能最大化期望回报。药老可以辅助估值、推演和纠偏，但策略属于萧炎，行动也必须由萧炎完成。
+
+关键在于，智能体通常事先不知道完整的转移概率或奖励函数，无法凭空解析出 $\pi^*$。他只能行动、观察后果、修正判断，再行动。有人通过估计动作价值选招，有人直接优化策略参数，也有人先学习环境模型再推演未来。下一章将展开这张“修炼路线图”。

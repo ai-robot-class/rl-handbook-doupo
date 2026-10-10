@@ -1,0 +1,278 @@
+---
+title: 萧炎的下一招：Sarsa 与 Q-Learning
+description: "在原创悬崖试炼中，对照 Sarsa 的实际下一招与 Q-learning 的贪心假想下一招。"
+---
+
+> **摘要.** 上一章中，药老只让萧炎评价一套固定路线；本章允许他一边历练，一边换招。Sarsa 与 Q-learning 都用表格动作价值做单步 TD 控制，但二者看向不同的"下一招"：Sarsa 从行为策略**实际选出的下一动作**学习，Q-learning 从目标策略**贪心假想的下一动作**学习。这一处差别，正是同策略与异策略的分界。
+
+> 本章出现的山路、悬崖与药老点拨均为教程原创试炼情境，并非原著桥段或人物原话。萧炎对应智能体，斗气大陆对应环境；药老帮助解释价值与目标，却不替智能体选择动作。
+
+MC 和 TD 预测问的是：若萧炎始终遵循策略 $\pi$，每个状态有多大长期价值？控制则更进一步：智能体不仅要从经验估值，还要据此改进未来生成经验的行为。换句话说，他不只复盘旧招，还要学会下一次该出哪一招。
+
+这是广义策略迭代的无模型版本：评估与改进仍像两股斗气交替推进，却没有可扫描的环境模型。萧炎手里只有亲历所得的转移流。
+
+**一步经验转移四元组。** 它回答“一次真实交互最少记录哪些量，才能把当前动作与下一结果连接起来？”
+
+$$
+(S_t, A_t, R_{t+1}, S_{t+1}).
+$$
+
+- $S_t$ — 出招前的状态；
+- $A_t$ — 在该状态选择的动作；
+- $R_{t+1}$ — 出招后立即收到的奖励；
+- $S_{t+1}$ — 环境转移到的下一状态。
+
+其中 $R_{t+1}$ 只是单步反馈，不等于状态或动作的长期价值。本章聚焦两个经典单步 TD 控制算法：**Sarsa** 与 **Q-learning**。
+
+按全书统一路线，教程进度此时来到“斗灵”：从大斗师阶段的预测跨入控制，边估值边改策略。它不是算法战力认证；在目标策略必须保持探索风险时，同策略 Sarsa 的答案可能比 Q-learning 的纯贪心答案更符合部署行为，不能只因后者常被称作“经典最优控制”就忽略目标差异。
+
+## 为什么选招要学习 $Q$，不能只看 $V$
+
+状态价值 $V(s)$ 只告诉萧炎：遵循某策略时，身处状态 $s$ 的长期前景如何。预测靠它足够，无模型控制却还不够，因为选招必须比较动作。若只掌握 $V$，他就得知道每个动作可能通往哪些下一状态、拿到哪些奖励及其概率，才能借环境模型向前看一步。
+
+**基于模型的一步动作前瞻式。** 它回答“已知完整环境动态与状态价值时，动作 $a$ 的一步期望价值是多少？”
+
+$$
+\sum_{s',r} p(s', r \mid s,a)\left[r + \gamma V(s')\right].
+$$
+
+该表达式依赖环境的一步动态 $p(s', r \mid s,a)$。可真实斗气大陆不会交出这张全知地图；无模型学习只能在试过动作后看到一次采样结果，不能对所有候选动作的可能后果直接求和。
+
+动作价值 $Q(s,a)$ 把"招式"本身纳入表的索引，绕开这一障碍。问题不再只是"此地如何"，而是"在此地使出这一招，随后继续行动，长期能有多好"。
+
+理想的对象是 MDP 一章中的最优动作价值函数。
+
+**最优动作价值贝尔曼方程。** 它回答“固定当前动作后，怎样把环境随机结果与下一状态的最佳动作递推起来？”
+
+$$
+q_*(s,a) = \sum_{s', r} p(s', r \mid s, a) \left[r + \gamma \max_{a'} q_*(s',a')\right].
+$$
+
+小写 $q_*$ 是真实最优动作价值函数，大写 $Q$ 是萧炎目前从样本练出的估值表。Q-learning 试图把表推向 $q_*$；Sarsa 则估计当前行为策略的动作价值。一旦每一招都直接附有价值，改进策略便不需要环境模型：比较可用动作的学习估值，取最大者即可。
+
+**贪心策略提取式。** 它回答“从当前 $Q$ 表中，哪些动作的估值最高？”若并列最大，应把结果理解为动作集合并明确平局规则。
+
+$$
+\pi(s) = \arg\max_a Q(s,a).
+$$
+
+这里不再需要转移概率。这就是 Sarsa 与 Q-learning 更新状态—动作表，而非单纯状态表的原因。
+
+## 一边试招，一边改招
+
+在药老的原创训练安排中，萧炎把两个过程交替进行：
+
+1. **评估：** 用一条真实转移更新 $Q$ 表中的一个状态—动作条目；
+2. **改进：** 根据这张表，以贪婪或近乎贪婪的方式选择后续动作。
+
+常用行为策略是 **$\epsilon$-贪婪**（$\epsilon$-greedy），与聚气台赌博机试炼中的探索规则相同：以概率 $1-\epsilon$ 选当前 $Q(s,a)$ 最大的招式，以概率 $\epsilon$ 在所有动作中均匀随机选择。前者利用已有判断，后者给尚未练熟的招式留下被验证的机会。
+
+更明确地说，令 $\mathcal{A}^*(s)=\arg\max_{a'}Q(s,a')$ 表示状态 $s$ 下所有并列最优动作，并在它们之间均匀打破平局。对于有限动作集 $\mathcal{A}$，可写成下面的概率规则。
+
+**并列安全的 $\epsilon$-贪婪策略式。** 它回答“利用概率如何在并列最优动作间分配，同时让所有动作保留探索概率？”
+
+$$
+\pi(a \mid s) =
+\begin{cases}
+\dfrac{1-\epsilon}{|\mathcal{A}^*(s)|} + \dfrac{\epsilon}{|\mathcal{A}|}, & a \in \mathcal{A}^*(s), \\
+\dfrac{\epsilon}{|\mathcal{A}|}, & a \notin \mathcal{A}^*(s).
+\end{cases}
+$$
+
+规则虽简单，却守住了"大多数时候用强招、偶尔检验冷门招"的平衡。在表格控制中，持续探索是让各状态—动作对反复获得更新的实际办法；只喊热血口号而不采样未知动作，并不会凭空得到最优策略。
+
+## Sarsa：从实际出的下一招学习
+
+Sarsa 的名字就来自一次更新用到的五个量。可把它读成萧炎真正走过的一段五元轨迹。
+
+**Sarsa 经验五元组。** 它回答“同策略更新除一步转移外，还要记录哪个实际下一动作？”
+
+$$
+(S_t, A_t, R_{t+1}, S_{t+1}, A_{t+1}).
+$$
+
+萧炎从 $S_t$ 出招 $A_t$，收到 $R_{t+1}$，落在 $S_{t+1}$，再按当前行为策略实际选出下一招 $A_{t+1}$。等这招确定后，Sarsa 才形成目标。
+
+**单步 Sarsa 更新式。** 它回答“怎样用实际选中的下一动作价值，修正当前状态—动作估值？”
+
+$$
+Q(S_t,A_t) \leftarrow Q(S_t,A_t) + \alpha \left[R_{t+1} + \gamma Q(S_{t+1}, A_{t+1}) - Q(S_t,A_t)\right].
+$$
+
+方括号内是动作价值 TD 误差，衡量旧估计 $Q(S_t,A_t)$ 与新的一步目标之差。目标由真实观察的奖励，加上**实际选中的**下一状态—动作对的折扣估值 $Q(S_{t+1}, A_{t+1})$ 组成。
+
+关键就在"实际选中"。若 $A_{t+1}$ 来自 $\epsilon$-贪婪策略，探索时偶尔出的险招也会进入目标。Sarsa 不假装萧炎下一步必定完美贪婪，而是如实学习正在收集数据的那套行为策略；被评估和被执行的是同一策略，因此它是 **同策略**（on-policy）方法。
+
+所以循环次序不可随意改：进入循环前先选首个动作；每次转移后先按行为策略选下一动作；再让前后两个动作共同参与更新；最后把时间推进。可运行实现如下：
+
+```python
+def sarsa_update(
+    q: np.ndarray,
+    state: int,
+    action: int,
+    reward: float,
+    next_state: int,
+    next_action: int,
+    done: bool,
+    alpha: float,
+    gamma: float,
+) -> None:
+    """就地应用同策略单步 Sarsa 更新。"""
+    next_value = 0.0 if done else q[next_state, next_action]
+    target = reward + gamma * next_value
+    q[state, action] += alpha * (target - q[state, action])
+```
+
+## Q-Learning：从贪心假想的下一招学习
+
+Q-learning 只换掉自举项，却因此改了学习对象。
+
+**单步 Q-learning 更新式。** 它回答“怎样用下一状态中的最大动作估值，修正当前状态—动作估值？”
+
+$$
+Q(S_t,A_t) \leftarrow Q(S_t,A_t) + \alpha \left[R_{t+1} + \gamma \max_{a'} Q(S_{t+1}, a') - Q(S_t,A_t)\right].
+$$
+
+它不采用行为策略实际采样的下一招，而是提出反事实问题："若萧炎从 $S_{t+1}$ 起总选当前看来最强的招式，价值是多少？" 答案就是下一状态里的最大动作价值。
+
+这个 $\max_{a'}$ 令 Q-learning 成为 **异策略**（off-policy）方法。实际收集数据的行为策略可以带探索，甚至与正在评估的贪婪目标策略不同；由于真实采样的下一动作并未出现在目标中，更新仍把 $Q$ 推向贪婪目标策略的动作价值。
+
+```python
+def q_learning_update(
+    q: np.ndarray,
+    state: int,
+    action: int,
+    reward: float,
+    next_state: int,
+    done: bool,
+    alpha: float,
+    gamma: float,
+) -> None:
+    """就地应用异策略单步 Q-learning 更新。"""
+    next_value = 0.0 if done else np.max(q[next_state])
+    target = reward + gamma * next_value
+    q[state, action] += alpha * (target - q[state, action])
+```
+
+把两个目标并排比较。
+
+**Sarsa 与 Q-learning 目标对照式。** 它回答“两个算法唯一关键的自举差异，究竟落在哪个下一动作上？”
+
+$$
+\begin{aligned}
+\text{Sarsa 目标} &= R_{t+1} + \gamma Q(S_{t+1}, A_{t+1}), \\
+\text{Q-learning 目标} &= R_{t+1} + \gamma \max_{a'} Q(S_{t+1}, a').
+\end{aligned}
+$$
+
+其余骨架完全相同：二者都采样真实转移、一步后自举，并按学习率 $\alpha$ 调整表中一个条目。差别不是"有没有探索"，而是自举目标看实际下一招还是贪心下一招。
+
+记住药老的两本名册：**行为策略**负责生成经验，**目标策略**是价值正在被学习的策略。Sarsa 的两本名册写的是同一个当前探索策略；Q-learning 可以用 $\epsilon$-贪婪行为采样，却学习由 $Q$ 诱导的纯贪婪目标策略。
+
+算一个明确例子。设当前 $Q(S_t,A_t)=4$，奖励为 $1$，$\gamma=0.9$，$\alpha=0.5$；下一状态各动作值为 $[10,2]$，而行为策略这次实际探索了第二招。Sarsa 目标为 $1+0.9\times2=2.8$，新值为 $3.4$；Q-learning 目标为 $1+0.9\times10=10$，新值为 $7$。同一条环境转移会产生不同更新，不是代码误差，而是两者评价的下一步策略不同。
+
+## 想抵达最优，探索不能半途而废
+
+在有限表格情形下，Q-learning 在标准随机逼近条件下可收敛到 $Q^*$：每个状态—动作对要被无限次访问，步长序列也须满足适当衰减条件。Watkins 与 Dayan 在 1992 年证明了这一结果。本章不展开证明，但不能省略条件——"莫欺少年穷"表达的是成长意志，不代表没有充分探索也能自动抵达最优。
+
+实践常采用 **衰减的 $\epsilon$-贪婪**：初期 $\epsilon$ 高，让萧炎广试招式；随着表更可靠，再把 $\epsilon$ 退火到小值，使行为近乎贪婪并保留少量探索。若降得太快，早期噪声可能让某些好动作暂时显得很差，此后再也得不到纠正机会。严格收敛论证中的探索与步长条件，应与工程上常用的有限训练调度区分开。
+
+对 Sarsa 而言，$\epsilon$ 调度还会改变它正在评价的策略。固定正 $\epsilon$ 意味着行为始终部分随机，Sarsa 学到的就是这套探索策略的动作价值；若按 GLIE 思路让策略在保持充分探索的同时渐近贪婪，Sarsa 才能朝贪婪最优策略逼近，而非永远停在带随机性的策略上。
+
+## 药老的两种延伸：期望 Sarsa 与 $n$ 步 Sarsa
+
+普通 Sarsa 只采样一个 $A_{t+1}$。**期望 Sarsa**（Expected Sarsa）则像把当前策略下所有可能下一招及其概率摊开，将单个样本值换为期望。
+
+**期望 Sarsa 更新式。** 它回答“怎样对当前策略的全部下一动作加权，而非只使用一次采样动作？”
+
+$$
+Q(S_t,A_t) \leftarrow Q(S_t,A_t) + \alpha \left[R_{t+1} + \gamma \sum_{a'} \pi(a' \mid S_{t+1}) Q(S_{t+1},a') - Q(S_t,A_t)\right].
+$$
+
+对 $\epsilon$-贪婪策略，这个期望按概率加权贪婪动作与探索动作。更新仍绑定当前策略，却消除了只抽一次 $A_{t+1}$ 带来的额外随机性，因此通常方差更低。
+
+**$n$ 步 Sarsa**（$n$-step Sarsa）则让萧炎先实际走过若干步、收集多个奖励，再以第 $n$ 步的状态—动作价值自举。
+
+**$n$ 步 Sarsa 回报式。** 它回答“怎样把前 $n$ 步真实奖励与第 $n$ 步实际动作价值接成控制目标？”
+
+$$
+G_{t:t+n} = R_{t+1} + \gamma R_{t+2} + \cdots + \gamma^{n-1}R_{t+n} + \gamma^n Q(S_{t+n}, A_{t+n}).
+$$
+
+$n=1$ 就是普通 Sarsa；$n$ 越大，目标在依赖当前表之前纳入越多真实奖励。这是上一章 $n$ 步桥梁在控制侧的版本，后面还会进入深度价值智能体。
+
+## 原创云岚险道试炼：悬崖行走
+
+本教程把标准 **悬崖行走**（Cliff Walking）任务包装成一场原创"云岚险道"教学试炼（非原著情节），底层仍严格使用 Gymnasium 的 `CliffWalking-v1`。网格左下角是起点，右下角是目标，中间一排为悬崖。普通移动奖励 $-1$；踏入悬崖奖励 $-100$，并把萧炎送回起点。
+
+该环境返回的离散编号在这里就是算法使用的马尔可夫状态表示；若只给一张遮住悬崖的局部画面，那便只是观测，表格 $Q(s,a)$ 的假设需重新审视。到达目标是 `terminated`；若训练器因步数上限产生 `truncated`，它不是同一种终止原因。代码可用统一 `done` 停止采样，但构造自举掩码时应依据任务语义决定截断后是否仍保留价值。
+
+<BasePathImage
+  src="/docs-assets/01-value-based/sarsa-and-q-learning/cliff-walking-gridworld.gif"
+  alt="悬崖行走环境：智能体从左下角出发，目标在右下角，悬崖位于两者之间。"
+  style={{ maxWidth: '70%', margin: '2rem auto', display: 'block' }}
+/>
+
+最短路线紧贴悬崖边缘。若每一步都能完美贪婪，它确实最短；可执行 $\epsilon$-贪婪行为的萧炎偶尔会随机试步，贴边时一次向下探索便付出 $-100$。因此"目标策略眼中的最短"与"带探索行为实际走起来最稳"可能不是同一路。
+
+脚本用完全相同的超参数比试两种方法：`500` 个片段，$\alpha = 0.5$，$\gamma = 1.0$，固定 $\epsilon = 0.1$。两者共享训练包装器；包装器接收片段运行器，建立 $Q$ 表，执行片段并记录回报，以免把工程差异误当成算法差异：
+
+```python
+def train_method(
+    run_episode: EpisodeRunner,
+    config: CliffWalkingConfig,
+    seed_offset: int = 0,
+) -> dict[str, np.ndarray]:
+    """在 CliffWalking-v1 上训练一个表格控制方法。"""
+    env = gym.make("CliffWalking-v1")
+    env.action_space.seed(config.seed + seed_offset)
+
+    n_states = int(env.observation_space.n)
+    n_actions = int(env.action_space.n)
+    q = np.zeros((n_states, n_actions))
+    returns = np.zeros(config.episodes)
+    steps = np.zeros(config.episodes, dtype=int)
+    rng = np.random.default_rng(config.seed + seed_offset)
+
+    for episode in range(config.episodes):
+        env.reset(seed=config.seed + seed_offset + episode)
+        returns[episode], steps[episode] = run_episode(env, q, config, rng)
+
+    env.close()
+    return {"q": q, "returns": returns, "steps": steps}
+```
+
+比试只是在同一包装器上换两个片段函数：
+
+```python
+def train(config: CliffWalkingConfig) -> dict[str, dict[str, np.ndarray]]:
+    """用相同的超参数训练 Sarsa 和 Q-learning。"""
+    return {
+        "Sarsa": train_method(run_sarsa_episode, config, seed_offset=0),
+        "Q-learning": train_method(run_q_learning_episode, config, seed_offset=10_000),
+    }
+```
+
+环境、表形状、学习率、折扣、探索率与片段数全部一致。唯一的算法差异就在运行器内部：Sarsa 用实际采样的下一动作更新，Q-learning 用下一状态的贪婪动作价值更新。
+
+训练后，脚本打印每张表诱导的贪婪策略，并绘制片段回报移动平均。Sarsa 的目标亲眼"看见"探索风险：站在悬崖附近时，$A_{t+1}$ 仍由同一 $\epsilon$-贪婪行为采样，偶尔会走进危险，于是动作价值包含这种代价。它往往偏好高一行的安全路线，即便路更长。
+
+Q-learning 学的是另一个对象。目标里的 $\max_{a'} Q(S_{t+1},a')$ 假定后续贪婪，而非继续探索；于是它能判定贴边路线对纯贪婪策略最优。训练时，行为策略仍会因随机探索坠崖，但被学习的价值始终指向最短的贪婪路径。
+
+学习曲线也会显出这种分野。Sarsa 把自身探索风险计入策略，训练回报通常更平稳；Q-learning 的目标向往贴边最短路，采样行为却仍注入随机动作，训练中可能出现更陡的坠落。药老把差别压成两问：Sarsa 问"我实际选的下一招会怎样？"，Q-learning 问"若下一招始终贪心会怎样？"。险道上的安全路线与贴边路线，正由这一处目标差异生出。
+
+> **险道段子。** 三十步贴崖在河东，一次随机探索就跌回河西；莫欺安全路线多走两格，它优化的正是“会继续探索的自己”。这是教程原创表达，不是原著对白。Q-learning 并非胆大，Sarsa 也并非胆小——它们只是把不同的下一步策略写进目标。
+
+## 完整代码：把两套招式放在同一试炼场
+
+包含悬崖行走、Sarsa、Q-learning 和学习曲线绘图的完整可运行示例：
+[`sarsa-and-q-learning.py`](https://github.com/ai-robot-class/rl-handbook-doupo/blob/main/content/docs/01-value-based/sarsa-and-q-learning/sarsa-and-q-learning.py)
+
+还可用下列实现交叉验证：
+- [VachanVY：SARSA、Q-learning、期望 SARSA](https://github.com/VachanVY/Reinforcement-Learning/blob/main/qlearning_sarsa_expectedsarsa_on_cliff_walking.py)
+- [Boyu AI：时序差分算法](https://github.com/boyu-ai/Hands-on-RL/blob/main/第5章-时序差分算法.ipynb)
+- [Gibberblot：时序差分学习](https://gibberblot.github.io/rl-notes/single-agent/temporal-difference-learning.html)
+
+## 下一程：从招式表到神经网络
+
+表格 Sarsa 与 Q-learning 要为每个状态—动作对单存一个数，小型险道尚可，一旦观测空间巨大便无处落表。下一章，萧炎把有限招式表收入"神经估值网络" $Q_\theta(s,a)$：它能在相似状态间泛化，也会引出函数近似、自举与异策略学习同时出现时的稳定性危机。DQN 正是下一道关。

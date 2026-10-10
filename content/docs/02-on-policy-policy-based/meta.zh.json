@@ -1,0 +1,10 @@
+{
+  "title": "同策略修炼：当场悟法 (On-Policy)",
+  "defaultOpen": true,
+  "pages": [
+    "policy-gradient-and-reinforce",
+    "actor-critic-a2c-a3c",
+    "trpo",
+    "ppo"
+  ]
+}
